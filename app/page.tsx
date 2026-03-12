@@ -43,6 +43,59 @@ const TABS: Array<{
   { value: "relatorio", label: "Relatório", icon: FileText },
 ];
 
+const ESG_LEVEL_REFERENCE = [
+  {
+    code: "E1",
+    title: "Elementar",
+    description:
+      "Estágio inicial, com práticas pontuais, baixa formalização e atuação predominantemente reativa.",
+    cardClass:
+      "border-red-200 bg-red-50 text-red-950",
+    badgeClass:
+      "bg-red-600 text-white",
+  },
+  {
+    code: "E2",
+    title: "Não Integrado",
+    description:
+      "Há iniciativas e controles básicos, mas ainda de forma dispersa, sem integração consistente à gestão do negócio.",
+    cardClass:
+      "border-orange-200 bg-orange-50 text-orange-950",
+    badgeClass:
+      "bg-orange-600 text-white",
+  },
+  {
+    code: "E3",
+    title: "Gerencial",
+    description:
+      "A organização já possui práticas estruturadas, indicadores e controles que demonstram gestão mais consistente dos temas ESG.",
+    cardClass:
+      "border-amber-200 bg-amber-50 text-amber-950",
+    badgeClass:
+      "bg-amber-600 text-white",
+  },
+  {
+    code: "E4",
+    title: "Estratégico",
+    description:
+      "O ESG está integrado à estratégia, com metas, monitoramento, comunicação e maior envolvimento da liderança e das partes interessadas.",
+    cardClass:
+      "border-emerald-200 bg-emerald-50 text-emerald-950",
+    badgeClass:
+      "bg-emerald-700 text-white",
+  },
+  {
+    code: "E5",
+    title: "Transformador",
+    description:
+      "A organização atua com protagonismo, inovação e influência positiva em sua cadeia de valor e setor, com ESG consolidado de forma avançada.",
+    cardClass:
+      "border-teal-200 bg-teal-50 text-teal-950",
+    badgeClass:
+      "bg-teal-700 text-white",
+  },
+] as const;
+
 function buildInitialAnswers(): AnswerMap {
   const initial: AnswerMap = {};
   for (const question of ESG_QUESTIONS) {
@@ -87,6 +140,15 @@ function maturityLabel(value: number | null): string {
   if (value < 3.5) return "Estruturado";
   if (value < 4.5) return "Avançado";
   return "Excelência";
+}
+
+function maturityCode(value: number | null): string {
+  if (value === null) return "Sem dados";
+  if (value < 1.5) return "E1";
+  if (value < 2.5) return "E2";
+  if (value < 3.5) return "E3";
+  if (value < 4.5) return "E4";
+  return "E5";
 }
 
 function axisNarrative(axisTitle: string, value: number | null): string {
@@ -259,6 +321,7 @@ export default function Page() {
       mediaGeral: metrics.overall,
       scorePercentual: metrics.overallPercent,
       maturidade: maturityLabel(metrics.overall),
+      nivelAtual: maturityCode(metrics.overall),
       pontosFortes: metrics.strongestAxis ? [AXIS_META[metrics.strongestAxis].title] : [],
       pontosCriticos: metrics.weakestAxis ? [AXIS_META[metrics.weakestAxis].title] : [],
       recomendacoes: metrics.recommendations,
@@ -611,6 +674,57 @@ export default function Page() {
             </section>
 
             <section>
+              <h3 className="text-xl font-semibold">Níveis de maturidade ESG</h3>
+              <p className="mt-2 text-slate-700">
+                Abaixo estão apresentados todos os níveis de maturidade ESG, com a
+                identificação do estágio atual da organização.
+              </p>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                {ESG_LEVEL_REFERENCE.map((level) => {
+                  const isCurrent = maturityCode(metrics.overall) === level.code;
+
+                  return (
+                    <div
+                      key={level.code}
+                      className={`rounded-2xl border p-4 ${level.cardClass} ${
+                        isCurrent ? "ring-2 ring-slate-900 shadow-md" : ""
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-lg font-semibold">
+                          {level.code}
+                        </div>
+                        {isCurrent && (
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${level.badgeClass}`}
+                          >
+                            Nível atual
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-2 text-sm font-medium">
+                        {level.title}
+                      </div>
+
+                      <p className="mt-3 text-sm leading-6 opacity-90">
+                        {level.description}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-sm leading-6 text-emerald-900">
+                  <strong>Enquadramento atual da empresa:</strong>{" "}
+                  {maturityCode(metrics.overall)} — {maturityLabel(metrics.overall)}
+                </p>
+              </div>
+            </section>
+
+            <section>
               <h3 className="text-xl font-semibold">Análise por eixo</h3>
               <div className="mt-4 space-y-4">
                 {(["ambiental", "governanca", "social"] as AxisKey[]).map((axis) => (
@@ -657,7 +771,7 @@ export default function Page() {
               <div className="mt-3 rounded-2xl border border-slate-200 p-4">
                 <ul className="space-y-3 text-slate-700">
                   {metrics.recommendations.map((item, index) => (
-                    <li key={index} className="list-disc ml-5">
+                    <li key={index} className="ml-5 list-disc">
                       {item}
                     </li>
                   ))}
