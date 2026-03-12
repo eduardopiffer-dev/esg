@@ -1,12 +1,16 @@
-import type { Metadata } from 'next';
-import './globals.css';
+import type { Metadata } from "next";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: 'Diagnóstico ESG | Sustence',
-  description: 'Sistema de diagnóstico ESG com base na ABNT PE 487.',
+  title: "Sustence • Diagnóstico ESG",
+  description: "Sistema de diagnóstico e maturidade ESG",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="pt-BR">
       <body>{children}</body>
