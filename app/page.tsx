@@ -11,7 +11,17 @@ import {
   Landmark,
   Building2,
   Mail,
+  Phone,
+  Globe,
 } from "lucide-react";
+import {
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  ResponsiveContainer,
+} from "recharts";
 import {
   AXIS_META,
   ESG_QUESTIONS,
@@ -128,6 +138,36 @@ function getWeakestAxis(axisAverages: Record<AxisKey, number | null>): AxisKey |
   return worstAxis;
 }
 
+function getRecommendations(axisAverages: Record<AxisKey, number | null>): string[] {
+  const recs: string[] = [];
+
+  if ((axisAverages.ambiental ?? 0) < 3) {
+    recs.push(
+      "Estruturar plano de ação ambiental com metas, indicadores e responsáveis, priorizando gestão de resíduos, água, emissões e eficiência operacional."
+    );
+  }
+
+  if ((axisAverages.social ?? 0) < 3) {
+    recs.push(
+      "Formalizar políticas e práticas sociais, com foco em diversidade, saúde e segurança, relacionamento com partes interessadas e direitos humanos."
+    );
+  }
+
+  if ((axisAverages.governanca ?? 0) < 3) {
+    recs.push(
+      "Fortalecer a governança por meio de controles internos, compliance, gestão de riscos, prestação de contas e integração estratégica do ESG."
+    );
+  }
+
+  if (recs.length === 0) {
+    recs.push(
+      "Consolidar as boas práticas existentes com metas mais ambiciosas, evidências rastreáveis e comunicação estruturada dos resultados ESG."
+    );
+  }
+
+  return recs;
+}
+
 export default function Page() {
   const [tab, setTab] = useState<TabValue>("formulario");
 
@@ -178,6 +218,7 @@ export default function Page() {
 
     const strongestAxis = getStrongestAxis(axisAverages);
     const weakestAxis = getWeakestAxis(axisAverages);
+    const recommendations = getRecommendations(axisAverages);
 
     return {
       axisAverages,
@@ -186,8 +227,18 @@ export default function Page() {
       answeredCount,
       strongestAxis,
       weakestAxis,
+      recommendations,
     };
   }, [answers]);
+
+  const radarData = useMemo(
+    () => [
+      { eixo: "Ambiental", score: percent(metrics.axisAverages.ambiental) },
+      { eixo: "Governança", score: percent(metrics.axisAverages.governanca) },
+      { eixo: "Social", score: percent(metrics.axisAverages.social) },
+    ],
+    [metrics.axisAverages]
+  );
 
   function handleAnswer(questionId: string, code: StageCode) {
     setAnswers((prev) => ({
@@ -208,6 +259,9 @@ export default function Page() {
       mediaGeral: metrics.overall,
       scorePercentual: metrics.overallPercent,
       maturidade: maturityLabel(metrics.overall),
+      pontosFortes: metrics.strongestAxis ? [AXIS_META[metrics.strongestAxis].title] : [],
+      pontosCriticos: metrics.weakestAxis ? [AXIS_META[metrics.weakestAxis].title] : [],
+      recomendacoes: metrics.recommendations,
       dataGeracao: new Date().toISOString(),
     };
 
@@ -315,10 +369,22 @@ export default function Page() {
           Diagnóstico ESG — Sustence
         </h1>
 
-        <p className="mt-4 max-w-3xl text-sm leading-7 text-emerald-50/90 md:text-base">
-          Avaliação estruturada por critérios ambientais, sociais e de governança,
-          com respostas em níveis E1 a E5 e leitura consolidada do estágio ESG.
-        </p>
+        <div className="mt-4 max-w-4xl space-y-4 text-sm leading-7 text-emerald-50/90 md:text-base">
+          <p>
+            Apresentamos aqui um diagnóstico completo e totalmente gratuito, para
+            avaliação de sua organização dentro dos pilares Ambiental, Social e de
+            Governança ( ESG ). Essa avaliação é formatada dentro dos critérios
+            estabelecidos pela Associação Brasileira de Normas Técnicas (ABNT) na
+            PE 487 (práticas específicas para o ESG).
+          </p>
+
+          <p>
+            O diagnóstico deve ser respondido assinalando apenas 1 das alternativas
+            de cada quesito, que esta em ordem crescente quanto ao grau de
+            maturidade ESG apresentado pela sua organização (o primeiro quesito é
+            sempre o mais básico e o último o mais completo).
+          </p>
+        </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-4">
           <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
@@ -418,44 +484,70 @@ export default function Page() {
       )}
 
       {tab === "dashboard" && (
-        <section className="mt-6 grid gap-6 md:grid-cols-3">
-          {(["ambiental", "governanca", "social"] as AxisKey[]).map((axis) => {
-            const Icon =
-              axis === "ambiental"
-                ? Leaf
-                : axis === "governanca"
-                ? Landmark
-                : Building2;
+        <section className="mt-6 space-y-6">
+          <div className="grid gap-6 md:grid-cols-3">
+            {(["ambiental", "governanca", "social"] as AxisKey[]).map((axis) => {
+              const Icon =
+                axis === "ambiental"
+                  ? Leaf
+                  : axis === "governanca"
+                  ? Landmark
+                  : Building2;
 
-            return (
-              <div key={axis} className="rounded-[28px] bg-white p-6 shadow-xl">
-                <div className="mb-4 flex items-center gap-3">
-                  <Icon className="h-5 w-5 text-emerald-700" />
-                  <div>
-                    <h3 className="font-semibold">{AXIS_META[axis].title}</h3>
-                    <p className="text-sm text-slate-500">
-                      {stageLabel(metrics.axisAverages[axis])}
-                    </p>
+              return (
+                <div key={axis} className="rounded-[28px] bg-white p-6 shadow-xl">
+                  <div className="mb-4 flex items-center gap-3">
+                    <Icon className="h-5 w-5 text-emerald-700" />
+                    <div>
+                      <h3 className="font-semibold">{AXIS_META[axis].title}</h3>
+                      <p className="text-sm text-slate-500">
+                        {stageLabel(metrics.axisAverages[axis])}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                <div className="text-4xl font-bold">
-                  {percent(metrics.axisAverages[axis])}%
-                </div>
+                  <div className="text-4xl font-bold">
+                    {percent(metrics.axisAverages[axis])}%
+                  </div>
 
-                <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-emerald-600"
-                    style={{ width: `${percent(metrics.axisAverages[axis])}%` }}
+                  <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full bg-emerald-600"
+                      style={{ width: `${percent(metrics.axisAverages[axis])}%` }}
+                    />
+                  </div>
+
+                  <p className="mt-4 text-sm leading-7 text-slate-600">
+                    {axisNarrative(AXIS_META[axis].title, metrics.axisAverages[axis])}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="rounded-[28px] bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center gap-3">
+              <BarChart3 className="h-5 w-5 text-emerald-700" />
+              <h2 className="text-2xl font-semibold">Gráfico Radar ESG</h2>
+            </div>
+
+            <div className="h-[360px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={radarData}>
+                  <PolarGrid />
+                  <PolarAngleAxis dataKey="eixo" />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                  <Radar
+                    name="Score"
+                    dataKey="score"
+                    stroke="#047857"
+                    fill="#10b981"
+                    fillOpacity={0.45}
                   />
-                </div>
-
-                <p className="mt-4 text-sm leading-7 text-slate-600">
-                  {axisNarrative(AXIS_META[axis].title, metrics.axisAverages[axis])}
-                </p>
-              </div>
-            );
-          })}
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </section>
       )}
 
@@ -508,24 +600,110 @@ export default function Page() {
         <section className="mt-6 rounded-[28px] bg-white p-8 shadow-2xl">
           <h2 className="text-3xl font-semibold">Relatório Executivo</h2>
 
-          <p className="mt-4 text-slate-700">
-            A organização <strong>{empresa || "não informada"}</strong> apresenta
-            maturidade ESG <strong>{maturityLabel(metrics.overall)}</strong>, com
-            score consolidado de <strong>{metrics.overallPercent}%</strong>.
-          </p>
+          <div className="mt-6 space-y-8">
+            <section>
+              <h3 className="text-xl font-semibold">Score ESG</h3>
+              <p className="mt-2 text-slate-700">
+                A organização <strong>{empresa || "não informada"}</strong> apresenta
+                maturidade ESG <strong>{maturityLabel(metrics.overall)}</strong>, com
+                score consolidado de <strong>{metrics.overallPercent}%</strong>.
+              </p>
+            </section>
 
-          <div className="mt-6 space-y-4">
-            {(["ambiental", "governanca", "social"] as AxisKey[]).map((axis) => (
-              <div key={axis} className="rounded-2xl border border-slate-200 p-4">
-                <div className="text-lg font-semibold">{AXIS_META[axis].title}</div>
-                <div className="mt-1 text-sm text-slate-500">
-                  {stageLabel(metrics.axisAverages[axis])}
+            <section>
+              <h3 className="text-xl font-semibold">Análise por eixo</h3>
+              <div className="mt-4 space-y-4">
+                {(["ambiental", "governanca", "social"] as AxisKey[]).map((axis) => (
+                  <div key={axis} className="rounded-2xl border border-slate-200 p-4">
+                    <div className="text-lg font-semibold">{AXIS_META[axis].title}</div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      {stageLabel(metrics.axisAverages[axis])}
+                    </div>
+                    <div className="mt-2 text-slate-700">
+                      Score: {percent(metrics.axisAverages[axis])}%
+                    </div>
+                    <p className="mt-3 text-sm leading-7 text-slate-600">
+                      {axisNarrative(AXIS_META[axis].title, metrics.axisAverages[axis])}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-xl font-semibold">Pontos fortes</h3>
+              <div className="mt-3 rounded-2xl border border-slate-200 p-4">
+                <p className="text-slate-700">
+                  {metrics.strongestAxis
+                    ? `O principal destaque atual está no eixo ${AXIS_META[metrics.strongestAxis].title}, que apresenta o melhor desempenho relativo entre os pilares avaliados.`
+                    : "Ainda não há respostas suficientes para identificação de pontos fortes."}
+                </p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-xl font-semibold">Pontos críticos</h3>
+              <div className="mt-3 rounded-2xl border border-slate-200 p-4">
+                <p className="text-slate-700">
+                  {metrics.weakestAxis
+                    ? `O principal ponto crítico está no eixo ${AXIS_META[metrics.weakestAxis].title}, que demanda priorização no plano de ação para evolução da maturidade ESG.`
+                    : "Ainda não há respostas suficientes para identificação de pontos críticos."}
+                </p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-xl font-semibold">Recomendações</h3>
+              <div className="mt-3 rounded-2xl border border-slate-200 p-4">
+                <ul className="space-y-3 text-slate-700">
+                  {metrics.recommendations.map((item, index) => (
+                    <li key={index} className="list-disc ml-5">
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-xl font-semibold">Contato Sustence</h3>
+              <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                <h4 className="text-lg font-semibold text-emerald-900">
+                  Quer melhorar sua maturidade ESG?
+                </h4>
+
+                <p className="mt-2 text-sm leading-6 text-emerald-900/85">
+                  A Sustence pode apoiar sua organização na evolução das práticas
+                  ambientais, sociais e de governança com plano de ação,
+                  implementação e acompanhamento.
+                </p>
+
+                <div className="mt-4 space-y-2 text-sm text-emerald-950">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    contato@sustence.com.br
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Globe className="h-4 w-4" />
+                    Sustence
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-4 w-4" />
+                    Atendimento consultivo ESG
+                  </div>
                 </div>
-                <div className="mt-2 text-slate-700">
-                  Score: {percent(metrics.axisAverages[axis])}%
+
+                <div className="mt-5">
+                  <a
+                    href={`mailto:contato@sustence.com.br?subject=Quero melhorar minha maturidade ESG&body=Olá, finalizei o diagnóstico ESG. Empresa: ${empresa || "-"} | Responsável: ${responsavel || "-"} | Score ESG: ${metrics.overallPercent}%`}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white"
+                  >
+                    <Mail className="h-4 w-4" />
+                    Falar com a Sustence
+                  </a>
                 </div>
               </div>
-            ))}
+            </section>
           </div>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -542,28 +720,6 @@ export default function Page() {
             >
               Exportar JSON
             </button>
-          </div>
-
-          <div className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-            <h3 className="text-lg font-semibold text-emerald-900">
-              Quer melhorar sua maturidade ESG?
-            </h3>
-
-            <p className="mt-2 text-sm leading-6 text-emerald-900/85">
-              A Sustence pode apoiar sua organização na evolução das práticas
-              ambientais, sociais e de governança com plano de ação,
-              implementação e acompanhamento.
-            </p>
-
-            <div className="mt-4">
-              <a
-                href={`mailto:contato@sustence.com.br?subject=Quero melhorar minha maturidade ESG&body=Olá, finalizei o diagnóstico ESG. Empresa: ${empresa || "-"} | Responsável: ${responsavel || "-"} | Score ESG: ${metrics.overallPercent}%`}
-                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white"
-              >
-                <Mail className="h-4 w-4" />
-                Falar com a Sustence
-              </a>
-            </div>
           </div>
         </section>
       )}
