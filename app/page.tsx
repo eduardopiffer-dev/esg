@@ -13,6 +13,7 @@ import {
   Mail,
   Phone,
   Globe,
+  Save,
 } from "lucide-react";
 import {
   RadarChart,
@@ -31,6 +32,9 @@ import {
 
 type TabValue = "formulario" | "dashboard" | "diagnostico" | "relatorio";
 type AnswerMap = Record<string, StageCode | null>;
+
+const SHEETS_WEBHOOK_URL =
+  "https://script.google.com/macros/s/AKfycbzZCf299hp8-DsCUOJcZRUoGr5tYswPTs6M99LQuCtJbT39p3DwPraVS3l8cXUqV7s/exec";
 
 const TABS: Array<{
   value: TabValue;
@@ -230,6 +234,8 @@ export default function Page() {
   const [observacoes, setObservacoes] = useState("");
 
   const [answers, setAnswers] = useState<AnswerMap>(buildInitialAnswers());
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
 
   const groupedQuestions = useMemo(() => {
     return {
@@ -291,6 +297,52 @@ export default function Page() {
     ],
     [metrics.axisAverages]
   );
+
+  async function saveToGoogleSheets() {
+    setSaveMessage("");
+
+    if (!empresa || !responsavel || !email) {
+      setSaveMessage("Preencha pelo menos empresa, responsável e e-mail antes de salvar.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const payload = {
+        data: new Date().toLocaleString("pt-BR"),
+        empresa,
+        responsavel,
+        email,
+        segmento,
+        score: metrics.overallPercent,
+        nivel: maturityLabel(metrics.overall),
+        nivelCodigo: maturityCode(metrics.overall),
+        ambiental: percent(metrics.axisAverages.ambiental),
+        governanca: percent(metrics.axisAverages.governanca),
+        social: percent(metrics.axisAverages.social),
+        pontoForte: metrics.strongestAxis ? AXIS_META[metrics.strongestAxis].title : "",
+        pontoCritico: metrics.weakestAxis ? AXIS_META[metrics.weakestAxis].title : "",
+        recomendacoes: metrics.recommendations.join(" | "),
+        observacoes,
+      };
+
+      await fetch(SHEETS_WEBHOOK_URL, {
+        method: "POST",
+        body: JSON.stringify(payload),
+        mode: "no-cors",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      setSaveMessage("Diagnóstico enviado para a planilha com sucesso.");
+    } catch {
+      setSaveMessage("Não foi possível salvar agora. Tente novamente.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function handleAnswer(questionId: string, code: StageCode) {
     setAnswers((prev) => ({
@@ -797,7 +849,7 @@ export default function Page() {
                   </div>
                 </div>
 
-                <div className="mt-5">
+                <div className="mt-5 flex flex-wrap gap-3">
                   <a
                     href={`mailto:contato@sustence.com.br?subject=Quero melhorar minha maturidade ESG&body=Olá, finalizei o diagnóstico ESG. Empresa: ${empresa || "-"} | Responsável: ${responsavel || "-"} | Score ESG: ${metrics.overallPercent}%`}
                     className="inline-flex items-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white"
@@ -805,7 +857,20 @@ export default function Page() {
                     <Mail className="h-4 w-4" />
                     Falar com a Sustence
                   </a>
+
+                  <button
+                    onClick={saveToGoogleSheets}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-emerald-300 bg-white px-5 py-3 text-sm font-semibold text-emerald-800 disabled:opacity-60"
+                  >
+                    <Save className="h-4 w-4" />
+                    {saving ? "Salvando..." : "Salvar diagnóstico"}
+                  </button>
                 </div>
+
+                {saveMessage ? (
+                  <p className="mt-4 text-sm text-emerald-900">{saveMessage}</p>
+                ) : null}
               </div>
             </section>
           </div>
