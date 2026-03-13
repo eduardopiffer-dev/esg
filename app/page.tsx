@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ClipboardList,
   BarChart3,
@@ -14,6 +14,7 @@ import {
   Phone,
   Globe,
   Save,
+  ArrowRight,
 } from "lucide-react";
 import {
   RadarChart,
@@ -164,7 +165,9 @@ function axisNarrative(axisTitle: string, value: number | null): string {
   return `O eixo ${axisTitle.toLowerCase()} demonstra alto nível de maturidade e práticas transformadoras.`;
 }
 
-function getStrongestAxis(axisAverages: Record<AxisKey, number | null>): AxisKey | null {
+function getStrongestAxis(
+  axisAverages: Record<AxisKey, number | null>
+): AxisKey | null {
   let bestAxis: AxisKey | null = null;
   let bestValue = -1;
 
@@ -179,7 +182,9 @@ function getStrongestAxis(axisAverages: Record<AxisKey, number | null>): AxisKey
   return bestAxis;
 }
 
-function getWeakestAxis(axisAverages: Record<AxisKey, number | null>): AxisKey | null {
+function getWeakestAxis(
+  axisAverages: Record<AxisKey, number | null>
+): AxisKey | null {
   let worstAxis: AxisKey | null = null;
   let worstValue = Number.POSITIVE_INFINITY;
 
@@ -194,7 +199,9 @@ function getWeakestAxis(axisAverages: Record<AxisKey, number | null>): AxisKey |
   return worstAxis;
 }
 
-function getRecommendations(axisAverages: Record<AxisKey, number | null>): string[] {
+function getRecommendations(
+  axisAverages: Record<AxisKey, number | null>
+): string[] {
   const recs: string[] = [];
 
   if ((axisAverages.ambiental ?? 0) < 3) {
@@ -236,6 +243,8 @@ export default function Page() {
   const [answers, setAnswers] = useState<AnswerMap>(buildInitialAnswers());
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const autoSavedRef = useRef(false);
+  const [savedOnce, setSavedOnce] = useState(false);
 
   const groupedQuestions = useMemo(() => {
     return {
@@ -272,7 +281,9 @@ export default function Page() {
     ].filter((value): value is number => value !== null);
 
     const overall = average(overallValues);
-    const answeredCount = Object.values(answers).filter((value) => value !== null).length;
+    const answeredCount = Object.values(answers).filter(
+      (value) => value !== null
+    ).length;
 
     const strongestAxis = getStrongestAxis(axisAverages);
     const weakestAxis = getWeakestAxis(axisAverages);
@@ -298,16 +309,24 @@ export default function Page() {
     [metrics.axisAverages]
   );
 
-  async function saveToGoogleSheets() {
-    setSaveMessage("");
-
+  async function saveToGoogleSheets(isAutomatic = false) {
     if (!empresa || !responsavel || !email) {
-      setSaveMessage("Preencha pelo menos empresa, responsável e e-mail antes de salvar.");
+      if (!isAutomatic) {
+        setSaveMessage(
+          "Preencha pelo menos empresa, responsável e e-mail antes de salvar."
+        );
+      }
+      return;
+    }
+
+    if (savedOnce) {
+      setSaveMessage("Diagnóstico já salvo na planilha.");
       return;
     }
 
     try {
       setSaving(true);
+      setSaveMessage("");
 
       const payload = {
         data: new Date().toLocaleString("pt-BR"),
@@ -321,8 +340,12 @@ export default function Page() {
         ambiental: percent(metrics.axisAverages.ambiental),
         governanca: percent(metrics.axisAverages.governanca),
         social: percent(metrics.axisAverages.social),
-        pontoForte: metrics.strongestAxis ? AXIS_META[metrics.strongestAxis].title : "",
-        pontoCritico: metrics.weakestAxis ? AXIS_META[metrics.weakestAxis].title : "",
+        pontoForte: metrics.strongestAxis
+          ? AXIS_META[metrics.strongestAxis].title
+          : "",
+        pontoCritico: metrics.weakestAxis
+          ? AXIS_META[metrics.weakestAxis].title
+          : "",
         recomendacoes: metrics.recommendations.join(" | "),
         observacoes,
       };
@@ -336,13 +359,32 @@ export default function Page() {
         },
       });
 
-      setSaveMessage("Diagnóstico enviado para a planilha com sucesso.");
+      setSavedOnce(true);
+      autoSavedRef.current = true;
+
+      setSaveMessage(
+        isAutomatic
+          ? "Diagnóstico salvo automaticamente na planilha."
+          : "Diagnóstico enviado para a planilha com sucesso."
+      );
     } catch {
       setSaveMessage("Não foi possível salvar agora. Tente novamente.");
     } finally {
       setSaving(false);
     }
   }
+
+  useEffect(() => {
+    if (tab !== "relatorio") return;
+    if (autoSavedRef.current) return;
+    if (savedOnce) return;
+
+    const hasAnyAnswer = Object.values(answers).some((value) => value !== null);
+
+    if (hasAnyAnswer && empresa && responsavel && email) {
+      saveToGoogleSheets(true);
+    }
+  }, [tab, answers, empresa, responsavel, email, savedOnce]);
 
   function handleAnswer(questionId: string, code: StageCode) {
     setAnswers((prev) => ({
@@ -364,8 +406,12 @@ export default function Page() {
       scorePercentual: metrics.overallPercent,
       maturidade: maturityLabel(metrics.overall),
       nivelAtual: maturityCode(metrics.overall),
-      pontosFortes: metrics.strongestAxis ? [AXIS_META[metrics.strongestAxis].title] : [],
-      pontosCriticos: metrics.weakestAxis ? [AXIS_META[metrics.weakestAxis].title] : [],
+      pontosFortes: metrics.strongestAxis
+        ? [AXIS_META[metrics.strongestAxis].title]
+        : [],
+      pontosCriticos: metrics.weakestAxis
+        ? [AXIS_META[metrics.weakestAxis].title]
+        : [],
       recomendacoes: metrics.recommendations,
       dataGeracao: new Date().toISOString(),
     };
@@ -387,7 +433,10 @@ export default function Page() {
     const meta = AXIS_META[axis];
 
     return (
-      <div key={axis} className="overflow-hidden rounded-[28px] bg-white shadow-xl">
+      <div
+        key={axis}
+        className="overflow-hidden rounded-[28px] bg-white shadow-xl"
+      >
         <div className={`bg-gradient-to-r ${meta.color} px-6 py-5 text-white`}>
           <h3 className="text-2xl font-semibold">{meta.title}</h3>
           <p className="mt-1 text-sm text-white/85">
@@ -437,7 +486,9 @@ export default function Page() {
                             name={question.id}
                             value={option.code}
                             checked={selected}
-                            onChange={() => handleAnswer(question.id, option.code)}
+                            onChange={() =>
+                              handleAnswer(question.id, option.code)
+                            }
                             className="mt-1 h-4 w-4"
                           />
 
@@ -456,6 +507,16 @@ export default function Page() {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="mt-8 flex justify-center">
+            <button
+              onClick={() => setTab("relatorio")}
+              className="inline-flex items-center gap-2 rounded-2xl bg-emerald-700 px-6 py-3 text-sm font-semibold text-white shadow-sm"
+            >
+              Ir para o relatório
+              <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </div>
@@ -477,17 +538,17 @@ export default function Page() {
         <div className="mt-4 max-w-4xl space-y-4 text-sm leading-7 text-emerald-50/90 md:text-base">
           <p>
             Apresentamos aqui um diagnóstico completo e totalmente gratuito, para
-            avaliação de sua organização dentro dos pilares Ambiental, Social e de
-            Governança ( ESG ). Essa avaliação é formatada dentro dos critérios
-            estabelecidos pela Associação Brasileira de Normas Técnicas (ABNT) na
-            PE 487 (práticas específicas para o ESG).
+            avaliação de sua organização dentro dos pilares Ambiental, Social e
+            de Governança ( ESG ). Essa avaliação é formatada dentro dos
+            critérios estabelecidos pela Associação Brasileira de Normas
+            Técnicas (ABNT) na PE 487 (práticas específicas para o ESG).
           </p>
 
           <p>
-            O diagnóstico deve ser respondido assinalando apenas 1 das alternativas
-            de cada quesito, que esta em ordem crescente quanto ao grau de
-            maturidade ESG apresentado pela sua organização (o primeiro quesito é
-            sempre o mais básico e o último o mais completo).
+            O diagnóstico deve ser respondido assinalando apenas 1 das
+            alternativas de cada quesito, que esta em ordem crescente quanto ao
+            grau de maturidade ESG apresentado pela sua organização (o primeiro
+            quesito é sempre o mais básico e o último o mais completo).
           </p>
         </div>
 
@@ -514,7 +575,9 @@ export default function Page() {
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-            <div className="text-xs text-emerald-100/80">Total de critérios</div>
+            <div className="text-xs text-emerald-100/80">
+              Total de critérios
+            </div>
             <div className="mt-2 text-2xl font-bold">
               {ESG_QUESTIONS.length}
             </div>
@@ -544,7 +607,8 @@ export default function Page() {
           <div className="rounded-[28px] bg-white p-6 shadow-xl">
             <h2 className="text-2xl font-semibold">Dados da avaliação</h2>
             <p className="mt-2 text-sm text-slate-500">
-              Preencha os dados da organização e, em seguida, responda aos critérios ESG.
+              Preencha os dados da organização e, em seguida, responda aos
+              critérios ESG.
             </p>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -591,43 +655,55 @@ export default function Page() {
       {tab === "dashboard" && (
         <section className="mt-6 space-y-6">
           <div className="grid gap-6 md:grid-cols-3">
-            {(["ambiental", "governanca", "social"] as AxisKey[]).map((axis) => {
-              const Icon =
-                axis === "ambiental"
-                  ? Leaf
-                  : axis === "governanca"
-                  ? Landmark
-                  : Building2;
+            {(["ambiental", "governanca", "social"] as AxisKey[]).map(
+              (axis) => {
+                const Icon =
+                  axis === "ambiental"
+                    ? Leaf
+                    : axis === "governanca"
+                    ? Landmark
+                    : Building2;
 
-              return (
-                <div key={axis} className="rounded-[28px] bg-white p-6 shadow-xl">
-                  <div className="mb-4 flex items-center gap-3">
-                    <Icon className="h-5 w-5 text-emerald-700" />
-                    <div>
-                      <h3 className="font-semibold">{AXIS_META[axis].title}</h3>
-                      <p className="text-sm text-slate-500">
-                        {stageLabel(metrics.axisAverages[axis])}
-                      </p>
+                return (
+                  <div
+                    key={axis}
+                    className="rounded-[28px] bg-white p-6 shadow-xl"
+                  >
+                    <div className="mb-4 flex items-center gap-3">
+                      <Icon className="h-5 w-5 text-emerald-700" />
+                      <div>
+                        <h3 className="font-semibold">
+                          {AXIS_META[axis].title}
+                        </h3>
+                        <p className="text-sm text-slate-500">
+                          {stageLabel(metrics.axisAverages[axis])}
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="text-4xl font-bold">
-                    {percent(metrics.axisAverages[axis])}%
-                  </div>
+                    <div className="text-4xl font-bold">
+                      {percent(metrics.axisAverages[axis])}%
+                    </div>
 
-                  <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-emerald-600"
-                      style={{ width: `${percent(metrics.axisAverages[axis])}%` }}
-                    />
-                  </div>
+                    <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-emerald-600"
+                        style={{
+                          width: `${percent(metrics.axisAverages[axis])}%`,
+                        }}
+                      />
+                    </div>
 
-                  <p className="mt-4 text-sm leading-7 text-slate-600">
-                    {axisNarrative(AXIS_META[axis].title, metrics.axisAverages[axis])}
-                  </p>
-                </div>
-              );
-            })}
+                    <p className="mt-4 text-sm leading-7 text-slate-600">
+                      {axisNarrative(
+                        AXIS_META[axis].title,
+                        metrics.axisAverages[axis]
+                      )}
+                    </p>
+                  </div>
+                );
+              }
+            )}
           </div>
 
           <div className="rounded-[28px] bg-white p-6 shadow-xl">
@@ -663,7 +739,8 @@ export default function Page() {
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="rounded-2xl border border-slate-200 p-4">
-                <strong>Maturidade geral:</strong> {maturityLabel(metrics.overall)}
+                <strong>Maturidade geral:</strong>{" "}
+                {maturityLabel(metrics.overall)}
               </div>
 
               <div className="rounded-2xl border border-slate-200 p-4">
@@ -672,31 +749,45 @@ export default function Page() {
 
               <div className="rounded-2xl border border-slate-200 p-4">
                 <strong>Eixo mais forte:</strong>{" "}
-                {metrics.strongestAxis ? AXIS_META[metrics.strongestAxis].title : "-"}
+                {metrics.strongestAxis
+                  ? AXIS_META[metrics.strongestAxis].title
+                  : "-"}
               </div>
 
               <div className="rounded-2xl border border-slate-200 p-4">
                 <strong>Eixo prioritário:</strong>{" "}
-                {metrics.weakestAxis ? AXIS_META[metrics.weakestAxis].title : "-"}
+                {metrics.weakestAxis
+                  ? AXIS_META[metrics.weakestAxis].title
+                  : "-"}
               </div>
             </div>
           </div>
 
           <div className="grid gap-6 md:grid-cols-3">
-            {(["ambiental", "governanca", "social"] as AxisKey[]).map((axis) => (
-              <div key={axis} className="rounded-[28px] bg-white p-6 shadow-xl">
-                <h3 className="text-lg font-semibold">{AXIS_META[axis].title}</h3>
-                <p className="mt-2 text-sm text-slate-500">
-                  {stageLabel(metrics.axisAverages[axis])}
-                </p>
-                <div className="mt-4 text-4xl font-bold">
-                  {percent(metrics.axisAverages[axis])}%
+            {(["ambiental", "governanca", "social"] as AxisKey[]).map(
+              (axis) => (
+                <div
+                  key={axis}
+                  className="rounded-[28px] bg-white p-6 shadow-xl"
+                >
+                  <h3 className="text-lg font-semibold">
+                    {AXIS_META[axis].title}
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-500">
+                    {stageLabel(metrics.axisAverages[axis])}
+                  </p>
+                  <div className="mt-4 text-4xl font-bold">
+                    {percent(metrics.axisAverages[axis])}%
+                  </div>
+                  <p className="mt-4 text-sm leading-7 text-slate-600">
+                    {axisNarrative(
+                      AXIS_META[axis].title,
+                      metrics.axisAverages[axis]
+                    )}
+                  </p>
                 </div>
-                <p className="mt-4 text-sm leading-7 text-slate-600">
-                  {axisNarrative(AXIS_META[axis].title, metrics.axisAverages[axis])}
-                </p>
-              </div>
-            ))}
+              )
+            )}
           </div>
         </section>
       )}
@@ -709,17 +800,20 @@ export default function Page() {
             <section>
               <h3 className="text-xl font-semibold">Score ESG</h3>
               <p className="mt-2 text-slate-700">
-                A organização <strong>{empresa || "não informada"}</strong> apresenta
-                maturidade ESG <strong>{maturityLabel(metrics.overall)}</strong>, com
-                score consolidado de <strong>{metrics.overallPercent}%</strong>.
+                A organização <strong>{empresa || "não informada"}</strong>{" "}
+                apresenta maturidade ESG{" "}
+                <strong>{maturityLabel(metrics.overall)}</strong>, com score
+                consolidado de <strong>{metrics.overallPercent}%</strong>.
               </p>
             </section>
 
             <section>
-              <h3 className="text-xl font-semibold">Níveis de maturidade ESG</h3>
+              <h3 className="text-xl font-semibold">
+                Níveis de maturidade ESG
+              </h3>
               <p className="mt-2 text-slate-700">
-                Abaixo estão apresentados todos os níveis de maturidade ESG, com a
-                identificação do estágio atual da organização.
+                Abaixo estão apresentados todos os níveis de maturidade ESG, com
+                a identificação do estágio atual da organização.
               </p>
 
               <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -761,7 +855,8 @@ export default function Page() {
               <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                 <p className="text-sm leading-6 text-emerald-900">
                   <strong>Enquadramento atual da empresa:</strong>{" "}
-                  {maturityCode(metrics.overall)} — {maturityLabel(metrics.overall)}
+                  {maturityCode(metrics.overall)} —{" "}
+                  {maturityLabel(metrics.overall)}
                 </p>
               </div>
             </section>
@@ -769,20 +864,30 @@ export default function Page() {
             <section>
               <h3 className="text-xl font-semibold">Análise por eixo</h3>
               <div className="mt-4 space-y-4">
-                {(["ambiental", "governanca", "social"] as AxisKey[]).map((axis) => (
-                  <div key={axis} className="rounded-2xl border border-slate-200 p-4">
-                    <div className="text-lg font-semibold">{AXIS_META[axis].title}</div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      {stageLabel(metrics.axisAverages[axis])}
+                {(["ambiental", "governanca", "social"] as AxisKey[]).map(
+                  (axis) => (
+                    <div
+                      key={axis}
+                      className="rounded-2xl border border-slate-200 p-4"
+                    >
+                      <div className="text-lg font-semibold">
+                        {AXIS_META[axis].title}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500">
+                        {stageLabel(metrics.axisAverages[axis])}
+                      </div>
+                      <div className="mt-2 text-slate-700">
+                        Score: {percent(metrics.axisAverages[axis])}%
+                      </div>
+                      <p className="mt-3 text-sm leading-7 text-slate-600">
+                        {axisNarrative(
+                          AXIS_META[axis].title,
+                          metrics.axisAverages[axis]
+                        )}
+                      </p>
                     </div>
-                    <div className="mt-2 text-slate-700">
-                      Score: {percent(metrics.axisAverages[axis])}%
-                    </div>
-                    <p className="mt-3 text-sm leading-7 text-slate-600">
-                      {axisNarrative(AXIS_META[axis].title, metrics.axisAverages[axis])}
-                    </p>
-                  </div>
-                ))}
+                  )
+                )}
               </div>
             </section>
 
@@ -851,7 +956,11 @@ export default function Page() {
 
                 <div className="mt-5 flex flex-wrap gap-3">
                   <a
-                    href={`mailto:contato@sustence.com.br?subject=Quero melhorar minha maturidade ESG&body=Olá, finalizei o diagnóstico ESG. Empresa: ${empresa || "-"} | Responsável: ${responsavel || "-"} | Score ESG: ${metrics.overallPercent}%`}
+                    href={`mailto:contato@sustence.com.br?subject=Quero melhorar minha maturidade ESG&body=Olá, finalizei o diagnóstico ESG. Empresa: ${
+                      empresa || "-"
+                    } | Responsável: ${responsavel || "-"} | Score ESG: ${
+                      metrics.overallPercent
+                    }%`}
                     className="inline-flex items-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white"
                   >
                     <Mail className="h-4 w-4" />
@@ -859,17 +968,23 @@ export default function Page() {
                   </a>
 
                   <button
-                    onClick={saveToGoogleSheets}
-                    disabled={saving}
+                    onClick={() => saveToGoogleSheets(false)}
+                    disabled={saving || savedOnce}
                     className="inline-flex items-center gap-2 rounded-2xl border border-emerald-300 bg-white px-5 py-3 text-sm font-semibold text-emerald-800 disabled:opacity-60"
                   >
                     <Save className="h-4 w-4" />
-                    {saving ? "Salvando..." : "Salvar diagnóstico"}
+                    {saving
+                      ? "Salvando..."
+                      : savedOnce
+                      ? "Já salvo"
+                      : "Salvar diagnóstico"}
                   </button>
                 </div>
 
                 {saveMessage ? (
-                  <p className="mt-4 text-sm text-emerald-900">{saveMessage}</p>
+                  <p className="mt-4 text-sm text-emerald-900">
+                    {saveMessage}
+                  </p>
                 ) : null}
               </div>
             </section>
